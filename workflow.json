@@ -1,0 +1,210 @@
+{
+  "name": "Synthetic RFQ to quotation draft",
+  "nodes": [
+    {
+      "id": "rfq-form",
+      "name": "RFQ PDF upload",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "synthetic-rfq-demo",
+      "parameters": {
+        "path": "rfq-quote-draft",
+        "formTitle": "RFQ quotation draft",
+        "formDescription": "Upload a text-based PDF RFQ. Review all flagged lines before sending a quote.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "rfq_pdf",
+              "fieldType": "file",
+              "requiredField": true,
+              "multipleFiles": false
+            }
+          ]
+        },
+        "options": {},
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "extract-pdf",
+      "name": "Extract PDF text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "onError": "continueErrorOutput",
+      "notes": "Form-trigger file field name not yet verified end-to-end; the webhook version was. Confirm the binary property name on first import.",
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "rfq_pdf",
+        "options": {}
+      }
+    },
+    {
+      "id": "quote-code",
+      "name": "Match catalogue and price",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Demo-only synthetic catalogue. Replace with approved Google Sheet or database rows in production.\nconst CATALOGUE_CSV = \"code,description,unit,unit_price_eur,pack_size,approved_substitute_code\\nCB-1P-6A,Miniature circuit breaker 1 pole 6 amp,pcs,7.40,1,\\nCB-1P-10A,Miniature circuit breaker 1 pole 10 amp,pcs,7.60,1,\\nCB-1P-16A,Miniature circuit breaker 1 pole 16 amp,pcs,7.80,1,\\nCB-1P-20A,Miniature circuit breaker 1 pole 20 amp,pcs,8.10,1,\\nCB-2P-10A,Miniature circuit breaker 2 pole 10 amp,pcs,13.20,1,\\nCB-2P-16A,Miniature circuit breaker 2 pole 16 amp,pcs,13.80,1,\\nCB-2P-20A,Miniature circuit breaker 2 pole 20 amp,pcs,14.10,1,\\nRCD-2P-40A-30MA,Residual current device 2 pole 40 amp 30 milliamp,pcs,32.50,1,\\nRCD-2P-63A-30MA,Residual current device 2 pole 63 amp 30 milliamp,pcs,38.20,1,\\nRCBO-1P-16A,Combined circuit breaker residual device 16 amp,pcs,28.90,1,\\nCAB-NYM-3x1.5,Installation cable 3 core 1.5 square mm,m,1.25,1,\\nCAB-NYM-3x2.5,Installation cable 3 core 2.5 square mm,m,1.85,1,\\nCAB-NYM-5x2.5,Installation cable 5 core 2.5 square mm,m,2.95,1,\\nCAB-FLEX-3x1.5,Flexible cable 3 core 1.5 square mm,m,1.60,1,\\nCAB-FLEX-3x2.5,Flexible cable 3 core 2.5 square mm,m,2.30,1,\\nSOCK-TWIN-W,Socket outlet twin white,pcs,5.70,1,\\nSOCK-SINGLE-W,Socket outlet single white,pcs,3.90,1,\\nSW-1G-2W,Wall switch one gang two way white,pcs,4.20,1,\\nSW-2G-2W,Wall switch two gang two way white,pcs,5.40,1,\\nSW-1G-1W,Wall switch one gang one way white,pcs,3.80,1,\\nLED-PNL-600,LED panel 600 mm square neutral white,pcs,42.00,1,\\nLED-PNL-300,LED panel 300 mm square neutral white,pcs,27.50,1,\\nLED-DL-10W,LED downlight 10 watt neutral white,pcs,12.60,1,\\nCOND-PVC-20,PVC conduit 20 mm,m,0.82,1,\\nCOND-PVC-25,PVC conduit 25 mm,m,1.05,1,\\nCOND-STEEL-20,Steel conduit 20 mm,m,3.60,1,\\nCLIP-20,Conduit clip 20 mm,pcs,0.16,50,\\nCLIP-25,Conduit clip 25 mm,pcs,0.20,50,\\nTERM-BLK-2P,Terminal block 2 pole,pcs,0.65,100,\\nTERM-BLK-3P,Terminal block 3 pole,pcs,0.82,100,\\nGLAND-M20-GY,Nylon cable gland M20 grey,pcs,1.15,1,\\nGLAND-M25-GY,Nylon cable gland M25 grey,pcs,1.45,1,\\nDB-6W,Distribution board 6 way,pcs,48.00,1,\\nDB-12W,Distribution board 12 way,pcs,72.00,1,\\nDB-18W,Distribution board 18 way,pcs,94.00,1,\\nFUSE-5A-BOX,Fuse 5 amp pack,box,9.50,10,\\nFUSE-13A-BOX,Fuse 13 amp pack,box,9.80,10,\\nMCB-OLD-16A,Discontinued miniature circuit breaker 1 pole 16 amp,pcs,7.10,1,CB-1P-16A\\nLED-OLD-600,Discontinued LED panel 600 mm,pcs,36.00,1,LED-PNL-600\\nSW-OLD-1G,Discontinued one gang wall switch,pcs,3.20,1,SW-1G-1W\";\n\n// This block has no Node imports and can be pasted into an n8n Code node.\nfunction parseCsv(text) {\n  const records = [];\n  let record = [];\n  let field = '';\n  let quoted = false;\n  for (let i = 0; i < text.length; i++) {\n    const ch = text[i];\n    if (quoted && ch === '\"' && text[i + 1] === '\"') { field += '\"'; i++; }\n    else if (ch === '\"') quoted = !quoted;\n    else if (ch === ',' && !quoted) { record.push(field); field = ''; }\n    else if ((ch === '\\n' || ch === '\\r') && !quoted) {\n      if (ch === '\\r' && text[i + 1] === '\\n') i++;\n      record.push(field); field = '';\n      if (record.some(value => value.trim() !== '')) records.push(record);\n      record = [];\n    } else field += ch;\n  }\n  if (quoted) throw new Error('Unclosed CSV quote');\n  record.push(field);\n  if (record.some(value => value.trim() !== '')) records.push(record);\n  if (!records.length) return [];\n  const headers = records.shift().map((value, i) => i === 0 ? value.replace(/^\\uFEFF/, '').trim() : value.trim());\n  return records.map(values => {\n    if (values.length !== headers.length) throw new Error('Invalid CSV column count');\n    return Object.fromEntries(headers.map((key, i) => [key, values[i].trim()]));\n  });\n}\n\nfunction normalizedCode(value) {\n  return String(value || '').toUpperCase().replace(/[\\s.\\-]/g, '');\n}\n\nfunction tokens(value) {\n  return new Set(String(value || '').toLowerCase().match(/[a-z0-9]+/g) || []);\n}\n\nfunction decimalParts(value) {\n  const match = String(value).match(/^(\\d+)(?:\\.(\\d+))?$/);\n  if (!match) return null;\n  const fraction = match[2] || '';\n  return { integer: BigInt(match[1] + fraction), scale: fraction.length };\n}\n\nfunction decimalString(integer, scale) {\n  const digits = integer.toString().padStart(scale + 1, '0');\n  return scale ? `${digits.slice(0, -scale)}.${digits.slice(-scale)}` : digits;\n}\n\nfunction priceMicros(value) {\n  const price = String(value === undefined || value === null ? '' : value).trim();\n  const parts = decimalParts(price);\n  return parts && parts.scale <= 6 ? { text: price, micros: parts.integer * 10n ** BigInt(6 - parts.scale) } : null;\n}\n\nfunction centsString(cents) {\n  return `${cents / 100n}.${(cents % 100n).toString().padStart(2, '0')}`;\n}\n\nfunction lineCents(price, quantityText) {\n  const quantity = decimalParts(quantityText);\n  const divisor = 10000n * 10n ** BigInt(quantity.scale);\n  return (price.micros * quantity.integer * 2n + divisor) / (2n * divisor);\n}\n\nfunction quantityAndUnit(raw) {\n  const match = raw.match(/^(.*?)\\s*(?:[-,:]\\s*)?(?:(\\d+(?:\\.\\d+)?)\\s*(pcs?|pieces?|units?|metres?|meters?|m|boxes?|bx)|[x×]\\s*(\\d+(?:\\.\\d+)?))\\s*$/i);\n  if (!match) return { item: raw.trim(), qty: null, unit: null };\n  const word = (match[3] || '').toLowerCase();\n  const unit = /^(pc|piece|unit)/.test(word) ? 'pcs' : /^(box|bx)/.test(word) ? 'box' : word ? 'm' : null;\n  const qty_text = match[2] || match[4];\n  return { item: match[1].trim().replace(/\\s*[-,:]\\s*$/, ''), qty: Number(qty_text), qty_text, unit };\n}\n\nfunction convertQuantity(qtyText, requestedUnit, row) {\n  const catalogueUnit = row.unit;\n  if (!requestedUnit || requestedUnit === catalogueUnit) return { qty: Number(qtyText), qty_text: qtyText, unit: catalogueUnit };\n  const pack = Number(row.pack_size);\n  if (!Number.isSafeInteger(pack) || pack <= 0) return null;\n  const quantity = decimalParts(qtyText);\n  if (requestedUnit === 'box' && catalogueUnit === 'pcs' && pack > 1) {\n    const text = decimalString(quantity.integer * BigInt(pack), quantity.scale);\n    return { qty: Number(text), qty_text: text, unit: 'pcs' };\n  }\n  if (requestedUnit === 'pcs' && catalogueUnit === 'box') {\n    const divisor = BigInt(pack) * 10n ** BigInt(quantity.scale);\n    if (quantity.integer % divisor === 0n) {\n      const text = (quantity.integer / divisor).toString();\n      return { qty: Number(text), qty_text: text, unit: 'box' };\n    }\n  }\n  return null;\n}\n\nfunction quoteFromRfq(text, catalogueRows, opts = {}) {\n  const threshold = opts.fuzzyThreshold === undefined ? 0.72 : Number(opts.fuzzyThreshold);\n  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) throw new Error('fuzzyThreshold must be between 0 and 1');\n  const rows = catalogueRows.slice().sort((a, b) => a.code.localeCompare(b.code));\n  const currency = opts.currency === undefined ? 'EUR' : String(opts.currency);\n  if (!/^[A-Za-z]{3}$/.test(currency)) throw new Error('currency must be a 3-letter code');\n  const header = { customer: null, date: null, rfq_number: null,\n    run_id: opts.run_id === undefined ? null : String(opts.run_id),\n    generated_at: opts.generated_at === undefined ? null : String(opts.generated_at),\n    currency: currency.toUpperCase(),\n    price_list_version: opts.price_list_version === undefined ? null : String(opts.price_list_version) };\n  const lines = [];\n  let inItems = false;\n  for (const sourceLine of String(text).split(/\\r?\\n/)) {\n    const raw = sourceLine.trim();\n    if (!raw) continue;\n    if (/^items\\s*:/i.test(raw)) { inItems = true; continue; }\n    if (!inItems) {\n      const field = raw.match(/^(customer|date|rfq\\s*(?:number|no\\.?))\\s*:\\s*(.+)$/i);\n      if (field) header[/^rfq/i.test(field[1]) ? 'rfq_number' : field[1].toLowerCase()] = field[2].trim();\n      continue;\n    }\n    if (/^(note|comment|please)\\s*:/i.test(raw)) continue;\n    const numbered = raw.match(/^(\\d+)\\s*[.)]\\s*(.+)$/);\n    if (!numbered) continue;\n    const line_no = Number(numbered[1]);\n    const parsed = quantityAndUnit(numbered[2]);\n    const base = { line_no, raw, matched_code: null, description: parsed.item, qty: parsed.qty, unit: parsed.unit,\n      unit_price_eur: null, line_total_eur: null, confidence: 0, status: 'NOT_FOUND', reason: 'no catalogue match' };\n    if (!Number.isFinite(parsed.qty) || parsed.qty <= 0 || !parsed.item) {\n      lines.push({ ...base, status: 'REVIEW', reason: 'quantity or item could not be parsed' });\n      continue;\n    }\n    const codeMatches = rows.filter(row => normalizedCode(row.code) === normalizedCode(parsed.item));\n    if (codeMatches.length > 1) {\n      lines.push({ ...base, status: 'REVIEW', reason: 'ambiguous catalogue code' });\n      continue;\n    }\n    if (codeMatches.length === 1) {\n      const row = codeMatches[0];\n      base.matched_code = row.code;\n      base.description = row.description;\n      base.confidence = 1;\n      const price = priceMicros(row.unit_price_eur);\n      if (!price) {\n        lines.push({ ...base, status: 'REVIEW', reason: 'price missing in approved list' });\n        continue;\n      }\n      if (row.approved_substitute_code) {\n        lines.push({ ...base, status: 'REVIEW', reason: `substitute proposed: ${row.approved_substitute_code}, needs approval` });\n        continue;\n      }\n      const converted = convertQuantity(parsed.qty_text, parsed.unit, row);\n      if (!converted) {\n        lines.push({ ...base, status: 'REVIEW', reason: 'unit conversion is ambiguous or unsupported' });\n        continue;\n      }\n      lines.push({ ...base, qty: converted.qty, unit: converted.unit, unit_price_eur: price.text,\n        line_total_eur: centsString(lineCents(price, converted.qty_text)), status: 'MATCHED', reason: 'catalogue code matched' });\n      continue;\n    }\n    const queryTokens = tokens(parsed.item);\n    const ranked = rows.map(row => {\n      const candidate = tokens(row.description);\n      const overlap = [...queryTokens].filter(token => candidate.has(token)).length;\n      const score = queryTokens.size ? overlap / queryTokens.size : 0;\n      return { row, score };\n    }).sort((a, b) => b.score - a.score || a.row.code.localeCompare(b.row.code));\n    if (ranked.length && ranked[0].score >= threshold && ranked[0].score > 0) {\n      const best = ranked[0];\n      lines.push({ ...base, matched_code: best.row.code, description: best.row.description,\n        confidence: best.score, status: 'REVIEW', reason: 'description match needs approval' });\n    } else lines.push(base);\n  }\n  const matchedCents = lines.filter(line => line.status === 'MATCHED').reduce((sum, line) =>\n    sum + BigInt(line.line_total_eur.replace('.', '')), 0n);\n  return { header, lines, labels: opts.labels || {}, totals: { matched_total_eur: centsString(matchedCents),\n    lines_for_review: lines.filter(line => line.status === 'REVIEW').length,\n    lines_not_found: lines.filter(line => line.status === 'NOT_FOUND').length } };\n}\n\n\nconst extracted = $input.first().json;\nconst rfqText = extracted.text || extracted.data || '';\nif (!rfqText) throw new Error('No text extracted from PDF; use a text-based PDF or add OCR.');\n// Demo constants: replace currency and price_list_version with the approved list metadata.\nconst currency = 'EUR';\nconst price_list_version = 'demo-2026-10';\nconst run_id = $execution.id;\nconst generated_at = $now.toISO();\nreturn [{ json: quoteFromRfq(rfqText, parseCsv(CATALOGUE_CSV), { run_id, generated_at, currency, price_list_version }) }];"
+      }
+    },
+    {
+      "id": "rows-code",
+      "name": "Prepare spreadsheet rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// This function has no Node imports and can be pasted into an n8n Code node.\nfunction toXlsxRows(quote, opts = {}) {\n  const header = quote.header;\n  const columns = ['section', 'run_id', 'generated_at', 'customer', 'rfq_number', 'date',\n    'currency', 'price_list_version', 'line_no', 'requested', 'matched_code',\n    'description', 'qty', 'unit', 'unit_price_eur', 'line_total_eur',\n    'confidence', 'status', 'reason'];\n  const common = { run_id: header.run_id, generated_at: header.generated_at,\n    customer: header.customer, rfq_number: header.rfq_number, date: header.date,\n    currency: header.currency, price_list_version: header.price_list_version };\n  const rows = [\n    { section: 'Run ID', ...common },\n    { section: 'Generated at', ...common }\n  ];\n  for (const line of quote.lines) {\n    rows.push({ section: 'Quotation draft', ...common, line_no: line.line_no, requested: line.raw,\n      matched_code: line.matched_code, description: line.description, qty: line.qty,\n      unit: line.unit, unit_price_eur: line.unit_price_eur, line_total_eur: line.line_total_eur,\n      confidence: line.confidence, status: line.status, reason: line.reason });\n  }\n  rows.push({ section: 'Total', ...common, line_total_eur: quote.totals.matched_total_eur,\n    reason: 'Priced MATCHED lines only; review and missing lines excluded' });\n  rows.push({ section: 'Needs review', ...common,\n    reason: `${quote.totals.lines_for_review} review; ${quote.totals.lines_not_found} not found` });\n  for (const line of quote.lines.filter(item => item.status !== 'MATCHED')) {\n    rows.push({ section: 'Needs review', ...common, line_no: line.line_no, requested: line.raw,\n      matched_code: line.matched_code, description: line.description, qty: line.qty,\n      unit: line.unit, confidence: line.confidence, status: line.status, reason: line.reason });\n  }\n  const labels = opts.labels || quote.labels || {};\n  return rows.map(row => Object.fromEntries(columns.map(column =>\n    [Object.prototype.hasOwnProperty.call(labels, column) ? labels[column] : column, row[column] ?? null])));\n}\n\n\nconst quote = $input.first().json;\nreturn toXlsxRows(quote).map(row => ({ json: row }));"
+      }
+    },
+    {
+      "id": "xlsx",
+      "name": "Create XLSX draft",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "operation": "xlsx",
+        "options": {
+          "fileName": "quotation-draft.xlsx",
+          "headerRow": true
+        },
+        "binaryPropertyName": "data"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Return quotation draft",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "respondWith": "binary",
+        "options": {
+          "responseBinaryPropertyName": "data",
+          "responseContentType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      }
+    },
+    {
+      "id": "respond-failed",
+      "name": "Return failure",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        900,
+        520
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'FAILED', run_id: $execution.id, failed_at: $now.toISO(), error: $json.error && ($json.error.message || $json.error) || 'unknown error', note: 'No quotation was produced for this run. Do not use any earlier file as a result of this request.' }) }}",
+        "options": {
+          "responseCode": 422
+        }
+      }
+    }
+  ],
+  "connections": {
+    "RFQ PDF upload": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF text": {
+      "main": [
+        [
+          {
+            "node": "Match catalogue and price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match catalogue and price": {
+      "main": [
+        [
+          {
+            "node": "Prepare spreadsheet rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare spreadsheet rows": {
+      "main": [
+        [
+          {
+            "node": "Create XLSX draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create XLSX draft": {
+      "main": [
+        [
+          {
+            "node": "Return quotation draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "tags": []
+}
